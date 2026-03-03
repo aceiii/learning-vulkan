@@ -12,6 +12,11 @@ set(SOURCE_FILES
 add_executable(${PROJECT_NAME} ${SOURCE_FILES})
 
 find_package(Vulkan REQUIRED)
+if (APPLE)
+find_package(slang CONFIG HINTS "$ENV{VULKAN_SDK}/macOS/lib/cmake")
+else()
+find_package(slang CONFIG HINTS "$ENV{VULKAN_SDK}/lib/cmake")
+endif()
 
 add_subdirectory(external/glfw)
 

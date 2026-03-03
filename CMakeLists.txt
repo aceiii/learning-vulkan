@@ -13,4 +13,6 @@ add_executable(${PROJECT_NAME} ${SOURCE_FILES})
 
 find_package(Vulkan REQUIRED)
 
-target_link_libraries(${PROJECT_NAME} PRIVATE Vulkan::Vulkan)
+add_subdirectory(external/glfw)
+
+target_link_libraries(${PROJECT_NAME} PRIVATE Vulkan::Vulkan glfw)

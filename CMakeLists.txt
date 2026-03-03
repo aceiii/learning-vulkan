@@ -20,5 +20,6 @@ endif()
 
 add_subdirectory(external/glfw)
 add_subdirectory(external/glm)
+add_subdirectory(external/Vulkan-Hpp)
 
-target_link_libraries(${PROJECT_NAME} PRIVATE Vulkan::Vulkan glfw glm::glm)
+target_link_libraries(${PROJECT_NAME} PRIVATE Vulkan::Vulkan Vulkan::Hpp glfw glm::glm)

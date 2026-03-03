@@ -2,6 +2,9 @@
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan.h>
 
+#define VULKAN_HPP_NO_STRUCT_CONSTRUCTORS
+#include <vulkan/vulkan.hpp>
+
 namespace {
   const char* const kWindowTitle = "Learning Vulkan";
   const int kWindowWidth = 800;

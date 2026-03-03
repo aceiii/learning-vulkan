@@ -19,5 +19,6 @@ find_package(slang CONFIG HINTS "$ENV{VULKAN_SDK}/lib/cmake")
 endif()
 
 add_subdirectory(external/glfw)
+add_subdirectory(external/glm)
 
-target_link_libraries(${PROJECT_NAME} PRIVATE Vulkan::Vulkan glfw)
+target_link_libraries(${PROJECT_NAME} PRIVATE Vulkan::Vulkan glfw glm::glm)

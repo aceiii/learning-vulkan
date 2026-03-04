@@ -1,4 +1,8 @@
 #include <print>
+#include <ranges>
+#include <algorithm>
+
+#define VULKAN_HPP_NO_STRUCT_CONSTRUCTORS
 #include <vulkan/vulkan_raii.hpp>
 
 #define GLFW_INCLUDE_VULKAN
@@ -9,7 +13,6 @@ namespace {
   constexpr int kWindowWidth = 800;
   constexpr int kWindowHeight = 600;
 }
-
 
 class HelloTriangleApplication {
 public:
@@ -30,6 +33,7 @@ private:
   }
 
   void InitVulkan() {
+    CreateInstance();
   }
 
   void MainLoop() {
@@ -43,7 +47,40 @@ private:
     glfwTerminate();
   }
 
+  void CreateInstance() {
+    constexpr vk::ApplicationInfo app_info{
+      .pApplicationName   = "Hello, Triangle",
+      .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
+      .pEngineName        = "No Engine",
+      .engineVersion      = VK_MAKE_VERSION(1, 0, 0),
+      .apiVersion         = vk::ApiVersion14,
+    };
+
+    uint32_t glfw_extension_count = 0;
+    auto glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
+
+    auto extension_properties = context_.enumerateInstanceExtensionProperties();
+    for (uint32_t i = 0; i < glfw_extension_count; ++i) {
+      if (std::ranges::none_of(extension_properties, [glfw_extension = glfw_extensions[i]](auto const& extension_property) {
+        return strcmp(extension_property.extensionName, glfw_extension) == 0;
+      })) {
+        throw std::runtime_error("Required GLFW extension not supported: " + std::string(glfw_extensions[i]));
+      }
+    }
+
+    vk::InstanceCreateInfo create_info{
+      .pApplicationInfo = &app_info,
+      .enabledExtensionCount = glfw_extension_count,
+      .ppEnabledExtensionNames = glfw_extensions,
+    };
+
+    instance_ = vk::raii::Instance(context_, create_info);
+  }
+
+private:
   GLFWwindow* window_;
+  vk::raii::Context context_;
+  vk::raii::Instance instance_ = nullptr;
 };
 
 

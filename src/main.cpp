@@ -47,6 +47,7 @@ private:
     CreateInstance();
     SetupDebugMessenger();
     PickPhysicalDevice();
+    CreateLogicalDevice();
   }
 
   void MainLoop() {
@@ -206,12 +207,60 @@ private:
 
     physical_device_ = *dev_it;
   }
+
+  uint32_t FindQueueFamilies(vk::raii::PhysicalDevice physical_device) {
+    std::vector<vk::QueueFamilyProperties> queue_family_properties = physical_device.getQueueFamilyProperties();
+
+    auto graphics_queue_family_property = std::find_if(
+      queue_family_properties.begin(),
+      queue_family_properties.end(),
+      [](const vk::QueueFamilyProperties& qfp) {
+        return qfp.queueFlags & vk::QueueFlagBits::eGraphics;
+      }
+    );
+
+    return static_cast<uint32_t>(std::distance(queue_family_properties.begin(), graphics_queue_family_property));
+  }
+
+  void CreateLogicalDevice() {
+    std::vector<vk::QueueFamilyProperties> queue_family_properties = physical_device_.getQueueFamilyProperties();
+    uint32_t graphics_index = FindQueueFamilies(physical_device_);
+
+    float queue_priority = 0.5f;
+    vk::DeviceQueueCreateInfo device_queue_create_info{
+      .queueFamilyIndex = graphics_index,
+      .queueCount = 1,
+      .pQueuePriorities = &queue_priority,
+    };
+
+    vk::PhysicalDeviceFeatures device_features;
+
+    vk::StructureChain<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan13Features, vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT> feature_chain = {
+      {},
+      { .dynamicRendering = true },
+      { .extendedDynamicState = true },
+    };
+
+    vk::DeviceCreateInfo device_create_info{
+      .pNext = &feature_chain.get<vk::PhysicalDeviceFeatures2>(),
+      .queueCreateInfoCount = 1,
+      .pQueueCreateInfos = &device_queue_create_info,
+      .enabledExtensionCount = static_cast<uint32_t>(device_extensions_.size()),
+      .ppEnabledExtensionNames = device_extensions_.data(),
+    };
+
+    device_ = vk::raii::Device(physical_device_, device_create_info);
+    graphics_queue_ = vk::raii::Queue(device_, graphics_index, 0);
+  }
+
 private:
   GLFWwindow* window_;
   vk::raii::Context context_;
   vk::raii::Instance instance_ = nullptr;
   vk::raii::DebugUtilsMessengerEXT debug_messenger_ = nullptr;
   vk::raii::PhysicalDevice physical_device_ = nullptr;
+  vk::raii::Device device_ = nullptr;
+  vk::raii::Queue graphics_queue_ = nullptr;
 
   std::vector<const char*> device_extensions_ = {
     vk::KHRSwapchainExtensionName,

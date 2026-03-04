@@ -1,6 +1,7 @@
 #include <print>
 #include <ranges>
 #include <algorithm>
+#include <vector>
 
 #define VULKAN_HPP_NO_STRUCT_CONSTRUCTORS
 #include <vulkan/vulkan_raii.hpp>
@@ -68,10 +69,17 @@ private:
       }
     }
 
+    std::vector<const char*> extensions{&glfw_extensions[0], &glfw_extensions[glfw_extension_count]};
+    extensions.push_back(vk::KHRPortabilityEnumerationExtensionName);
+    for (const auto& extension : extensions) {
+      std::println("extension: {}", std::string{extension});
+    }
+
     vk::InstanceCreateInfo create_info{
+      .flags = vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR,
       .pApplicationInfo = &app_info,
-      .enabledExtensionCount = glfw_extension_count,
-      .ppEnabledExtensionNames = glfw_extensions,
+      .enabledExtensionCount = static_cast<uint32_t>(extensions.size()),
+      .ppEnabledExtensionNames = extensions.data(),
     };
 
     instance_ = vk::raii::Instance(context_, create_info);

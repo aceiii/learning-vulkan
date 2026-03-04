@@ -46,6 +46,7 @@ private:
   void InitVulkan() {
     CreateInstance();
     SetupDebugMessenger();
+    PickPhysicalDevice();
   }
 
   void MainLoop() {
@@ -176,11 +177,45 @@ private:
     return vk::False;
   }
 
+  void PickPhysicalDevice() {
+    auto devices = instance_.enumeratePhysicalDevices();
+    const auto dev_it = std::ranges::find_if(devices, [&](const auto& device) {
+      auto queue_families = device.getQueueFamilyProperties();
+      bool is_suitable = device.getProperties().apiVersion >= VK_API_VERSION_1_3;
+      const auto qfp_iter = std::ranges::find_if(queue_families, [](const vk::QueueFamilyProperties& qfp) {
+        return (qfp.queueFlags & vk::QueueFlagBits::eGraphics) != static_cast<vk::QueueFlags>(0);
+      });
+
+      is_suitable = is_suitable && (qfp_iter != queue_families.end());
+
+      auto extensions = device.enumerateDeviceExtensionProperties();
+      bool found = true;
+      for (const auto& extension : device_extensions_) {
+        auto extension_iter = std::ranges::find_if(extensions, [extension](const auto& ext) {
+          return strcmp(ext.extensionName, extension) == 0;
+        });
+        found = found && (extension_iter != extensions.end());
+      }
+
+      return is_suitable && found;
+    });
+
+    if (dev_it == devices.end()) {
+      throw std::runtime_error("Failed to find a suitable GPU");
+    }
+
+    physical_device_ = *dev_it;
+  }
 private:
   GLFWwindow* window_;
   vk::raii::Context context_;
   vk::raii::Instance instance_ = nullptr;
   vk::raii::DebugUtilsMessengerEXT debug_messenger_ = nullptr;
+  vk::raii::PhysicalDevice physical_device_ = nullptr;
+
+  std::vector<const char*> device_extensions_ = {
+    vk::KHRSwapchainExtensionName,
+  };
 };
 
 

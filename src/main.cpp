@@ -67,12 +67,9 @@ private:
       .apiVersion         = vk::ApiVersion14,
     };
 
-    uint32_t glfw_extension_count = 0;
-    auto glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
-
-    std::vector<const char*> extensions{&glfw_extensions[0], &glfw_extensions[glfw_extension_count]};
-    extensions.push_back(vk::KHRPortabilityEnumerationExtensionName);
-    for (const auto& extension : extensions) {
+    auto required_extensions = getRequiredInstanceExtensions();
+    required_extensions.push_back(vk::KHRPortabilityEnumerationExtensionName);
+    for (const auto& extension : required_extensions) {
       std::println("Required extension: {}", std::string{extension});
     }
 
@@ -81,12 +78,14 @@ private:
       std::println("Supported extension: {}", std::string(extension_property.extensionName));
     }
 
-    for (const auto& extension : extensions) {
-      if (std::ranges::none_of(extension_properties, [extension](auto const& extension_property) {
-        return strcmp(extension_property.extensionName, extension) == 0;
-      })) {
-        throw std::runtime_error("Required extension not supported: " + std::string(extension));
-      }
+    auto unsupported_property_it = std::ranges::find_if(required_extensions, [&extension_properties](const auto& required_exension) {
+      return std::ranges::none_of(extension_properties, [required_exension](const auto& extension_property) {
+        return strcmp(extension_property.extensionName, required_exension) == 0;
+      });
+    });
+
+    if (unsupported_property_it != required_extensions.end()) {
+      throw std::runtime_error("Required extension not supported: " + std::string(*unsupported_property_it));
     }
 
     std::vector<const char*> required_layers;
@@ -117,11 +116,20 @@ private:
     vk::InstanceCreateInfo create_info{
       .flags = vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR,
       .pApplicationInfo = &app_info,
-      .enabledExtensionCount = static_cast<uint32_t>(extensions.size()),
-      .ppEnabledExtensionNames = extensions.data(),
+      .enabledExtensionCount = static_cast<uint32_t>(required_extensions.size()),
+      .ppEnabledExtensionNames = required_extensions.data(),
+      .enabledLayerCount = static_cast<uint32_t>(required_layers.size()),
+      .ppEnabledLayerNames = required_layers.data(),
     };
 
     instance_ = vk::raii::Instance(context_, create_info);
+  }
+
+  std::vector<const char*> getRequiredInstanceExtensions() {
+    uint32_t glfw_extension_count = 0;
+    auto glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
+    std::vector extensions(glfw_extensions, glfw_extensions + glfw_extension_count);
+    return extensions;
   }
 
 private:

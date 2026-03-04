@@ -13,6 +13,16 @@ namespace {
   constexpr char const* kWindowTitle = "Learning Vulkan";
   constexpr int kWindowWidth = 800;
   constexpr int kWindowHeight = 600;
+
+  const std::vector<const char*> gValidationLayers = {
+    "VK_LAYER_KHRONOS_validation"
+  };
+
+#if NDEBUG
+  constexpr bool kEnableValidationLayers = false;
+#else
+  constexpr bool kEnableValidationLayers = true;
+#endif
 }
 
 class HelloTriangleApplication {
@@ -60,20 +70,49 @@ private:
     uint32_t glfw_extension_count = 0;
     auto glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
 
-    auto extension_properties = context_.enumerateInstanceExtensionProperties();
-    for (uint32_t i = 0; i < glfw_extension_count; ++i) {
-      if (std::ranges::none_of(extension_properties, [glfw_extension = glfw_extensions[i]](auto const& extension_property) {
-        return strcmp(extension_property.extensionName, glfw_extension) == 0;
-      })) {
-        throw std::runtime_error("Required GLFW extension not supported: " + std::string(glfw_extensions[i]));
-      }
-    }
-
     std::vector<const char*> extensions{&glfw_extensions[0], &glfw_extensions[glfw_extension_count]};
     extensions.push_back(vk::KHRPortabilityEnumerationExtensionName);
     for (const auto& extension : extensions) {
-      std::println("extension: {}", std::string{extension});
+      std::println("Required extension: {}", std::string{extension});
     }
+
+    auto extension_properties = context_.enumerateInstanceExtensionProperties();
+    for (const auto& extension_property : extension_properties) {
+      std::println("Supported extension: {}", std::string(extension_property.extensionName));
+    }
+
+    for (const auto& extension : extensions) {
+      if (std::ranges::none_of(extension_properties, [extension](auto const& extension_property) {
+        return strcmp(extension_property.extensionName, extension) == 0;
+      })) {
+        throw std::runtime_error("Required extension not supported: " + std::string(extension));
+      }
+    }
+
+    std::vector<const char*> required_layers;
+    if (kEnableValidationLayers) {
+      required_layers.assign(gValidationLayers.begin(), gValidationLayers.end());
+    }
+
+    for (const auto& layer : required_layers) {
+      std::println("Requird layer: {}", std::string(layer));
+    }
+
+    auto layer_properties = context_.enumerateInstanceLayerProperties();
+    for (const auto& layer_property : layer_properties) {
+      std::println("Supported layer: {}", std::string(layer_property.layerName));
+    }
+
+    auto unsupported_layer_it = std::ranges::find_if(required_layers, [&layer_properties](const auto& required_layer) {
+      return std::ranges::none_of(layer_properties, [required_layer](const auto& layer_property) {
+        return strcmp(layer_property.layerName, required_layer) == 0;
+      });
+    });
+
+    if (unsupported_layer_it != required_layers.end()) {
+      throw std::runtime_error("Required layer not supported: " + std::string(*unsupported_layer_it));
+    }
+
 
     vk::InstanceCreateInfo create_info{
       .flags = vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR,

@@ -45,6 +45,7 @@ private:
 
   void InitVulkan() {
     CreateInstance();
+    SetupDebugMessenger();
   }
 
   void MainLoop() {
@@ -68,7 +69,6 @@ private:
     };
 
     auto required_extensions = getRequiredInstanceExtensions();
-    required_extensions.push_back(vk::KHRPortabilityEnumerationExtensionName);
     for (const auto& extension : required_extensions) {
       std::println("Required extension: {}", std::string{extension});
     }
@@ -129,13 +129,58 @@ private:
     uint32_t glfw_extension_count = 0;
     auto glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
     std::vector extensions(glfw_extensions, glfw_extensions + glfw_extension_count);
+
+    // Required for MacOS
+    extensions.push_back(vk::KHRPortabilityEnumerationExtensionName);
+
+    if (kEnableValidationLayers) {
+      extensions.push_back(vk::EXTDebugUtilsExtensionName);
+    }
+
     return extensions;
+  }
+
+  void SetupDebugMessenger() {
+    if (!kEnableValidationLayers) {
+      return;
+    }
+
+    vk::DebugUtilsMessageSeverityFlagsEXT severity_flags(
+      vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |
+      vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
+      vk::DebugUtilsMessageSeverityFlagBitsEXT::eError
+    );
+
+    vk::DebugUtilsMessageTypeFlagsEXT message_type_flags(
+      vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
+      vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
+      vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation
+    );
+
+    vk::DebugUtilsMessengerCreateInfoEXT debug_utils_messenger_create_info{
+      .messageSeverity = severity_flags,
+      .messageType = message_type_flags,
+      .pfnUserCallback = &DebugCallback,
+    };
+
+    debug_messenger_ = instance_.createDebugUtilsMessengerEXT(debug_utils_messenger_create_info);
+  }
+
+  static VKAPI_ATTR vk::Bool32 VKAPI_CALL DebugCallback(
+      vk::DebugUtilsMessageSeverityFlagBitsEXT severity,
+      vk::DebugUtilsMessageTypeFlagsEXT type,
+      const vk::DebugUtilsMessengerCallbackDataEXT* callback_data,
+      void* user_Data)
+  {
+    std::println(stderr, "Validation layer: type {} msg: {}", to_string(type), callback_data->pMessage);
+    return vk::False;
   }
 
 private:
   GLFWwindow* window_;
   vk::raii::Context context_;
   vk::raii::Instance instance_ = nullptr;
+  vk::raii::DebugUtilsMessengerEXT debug_messenger_ = nullptr;
 };
 
 

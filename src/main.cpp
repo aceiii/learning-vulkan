@@ -546,7 +546,52 @@ private:
   }
 
   void RecordCommandBuffer(uint32_t image_index) {
+    command_buffer_.begin({});
 
+    TransitionImageLayout(
+      image_index,
+      vk::ImageLayout::eUndefined,
+      vk::ImageLayout::eColorAttachmentOptimal,
+      {},
+      vk::AccessFlagBits2::eColorAttachmentWrite,
+      vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+      vk::PipelineStageFlagBits2::eColorAttachmentOutput
+    );
+
+    vk::ClearValue clear_color = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f);
+    vk::RenderingAttachmentInfo attachment_info{
+      .imageView = swap_chain_image_views_[image_index],
+      .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+      .loadOp = vk::AttachmentLoadOp::eClear,
+      .storeOp = vk::AttachmentStoreOp::eStore,
+      .clearValue = clear_color,
+    };
+
+    vk::RenderingInfo rendering_info{
+      .renderArea = { .offset = {0, 0}, .extent = swap_chain_extent_ },
+      .layerCount = 1,
+      .colorAttachmentCount = 1,
+      .pColorAttachments = &attachment_info,
+    };
+
+    command_buffer_.beginRendering(rendering_info);
+    command_buffer_.bindPipeline(vk::PipelineBindPoint::eGraphics, graphics_pipeline_);
+    command_buffer_.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swap_chain_extent_.width), static_cast<float>(swap_chain_extent_.height), 0.0f, 1.0f));
+    command_buffer_.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swap_chain_extent_));
+    command_buffer_.draw(3, 1, 0, 0);
+    command_buffer_.endRendering();
+
+    TransitionImageLayout(
+      image_index,
+      vk::ImageLayout::eColorAttachmentOptimal,
+      vk::ImageLayout::ePresentSrcKHR,
+      vk::AccessFlagBits2::eColorAttachmentWrite,
+      {},
+      vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+      vk::PipelineStageFlagBits2::eBottomOfPipe
+    );
+
+    command_buffer_.end();
   }
 
   void TransitionImageLayout(

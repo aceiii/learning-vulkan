@@ -1,7 +1,10 @@
 #include <cstdint>
 #include <algorithm>
+#include <fstream>
 #include <limits>
 #include <print>
+#include <string>
+#include <string_view>
 #include <ranges>
 #include <tuple>
 #include <vector>
@@ -26,6 +29,20 @@ namespace {
 #else
   constexpr bool kEnableValidationLayers = true;
 #endif
+}
+
+static std::vector<char> ReadFile(const std::string& filename) {
+  std::ifstream file(filename, std::ios::ate | std::ios::binary);
+  if (!file.is_open()) {
+    throw std::runtime_error("Failed to open file: " + std::string(strerror(errno)));
+  }
+
+  std::vector<char> buffer(file.tellg());
+  file.seekg(0, std::ios::beg);
+  file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+  file.close();
+
+  return buffer;
 }
 
 class HelloTriangleApplication {
@@ -54,6 +71,7 @@ private:
     CreateLogicalDevice();
     CreateSwapChain();
     CreateImageViews();
+    CreateGraphicsPipeline();
   }
 
   void MainLoop() {
@@ -388,6 +406,38 @@ private:
       image_view_create_info.image = image;
       swap_chain_image_views_.emplace_back(device_, image_view_create_info);
     }
+  }
+
+  void CreateGraphicsPipeline() {
+    vk::raii::ShaderModule shader_module = CreateShaderModule(ReadFile("shaders/slang.spv"));
+
+    vk::PipelineShaderStageCreateInfo vert_shader_stage_info{
+      .stage = vk::ShaderStageFlagBits::eVertex,
+      .module = shader_module,
+      .pName = "vertMain",
+    };
+
+    vk::PipelineShaderStageCreateInfo frag_shader_stage_info{
+      .stage = vk::ShaderStageFlagBits::eFragment,
+      .module = shader_module,
+      .pName = "fragMain",
+    };
+
+    vk::PipelineShaderStageCreateInfo shader_stages[] = {
+      vert_shader_stage_info,
+      frag_shader_stage_info,
+    };
+  }
+
+  [[nodiscard]] vk::raii::ShaderModule CreateShaderModule(const std::vector<char>& code) const {
+    vk::ShaderModuleCreateInfo create_info{
+      .codeSize = code.size() * sizeof(char),
+      .pCode = reinterpret_cast<const uint32_t*>(code.data()),
+    };
+
+    vk::raii::ShaderModule shader_module{device_, create_info};
+
+    return shader_module;
   }
 
 private:

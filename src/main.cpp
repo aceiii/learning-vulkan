@@ -53,6 +53,7 @@ private:
     PickPhysicalDevice();
     CreateLogicalDevice();
     CreateSwapChain();
+    CreateImageViews();
   }
 
   void MainLoop() {
@@ -374,6 +375,21 @@ private:
     };
   }
 
+  void CreateImageViews() {
+    swap_chain_image_views_.clear();
+
+    vk::ImageViewCreateInfo image_view_create_info{
+      .viewType = vk::ImageViewType::e2D,
+      .format = swap_chain_image_format_,
+      .subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 },
+    };
+
+    for (auto image : swap_chain_images_) {
+      image_view_create_info.image = image;
+      swap_chain_image_views_.emplace_back(device_, image_view_create_info);
+    }
+  }
+
 private:
   GLFWwindow* window_;
   vk::raii::Context context_;
@@ -385,9 +401,10 @@ private:
   vk::raii::SurfaceKHR surface_ = nullptr;
   vk::raii::Queue present_queue_ = nullptr;
   vk::raii::SwapchainKHR swap_chain_ = nullptr;
-  std::vector<vk::Image> swap_chain_images_;
   vk::Format swap_chain_image_format_;
   vk::Extent2D swap_chain_extend_;
+  std::vector<vk::Image> swap_chain_images_;
+  std::vector<vk::raii::ImageView> swap_chain_image_views_;
 
   std::vector<const char*> device_extensions_ = {
     vk::KHRSwapchainExtensionName,

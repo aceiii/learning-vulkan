@@ -1,6 +1,7 @@
+#include <algorithm>
 #include <print>
 #include <ranges>
-#include <algorithm>
+#include <tuple>
 #include <vector>
 
 #define VULKAN_HPP_NO_STRUCT_CONSTRUCTORS
@@ -46,6 +47,7 @@ private:
   void InitVulkan() {
     CreateInstance();
     SetupDebugMessenger();
+    CreateSurface();
     PickPhysicalDevice();
     CreateLogicalDevice();
   }
@@ -208,8 +210,8 @@ private:
     physical_device_ = *dev_it;
   }
 
-  uint32_t FindQueueFamilies(vk::raii::PhysicalDevice physical_device) {
-    std::vector<vk::QueueFamilyProperties> queue_family_properties = physical_device.getQueueFamilyProperties();
+  std::tuple<uint32_t, uint32_t> FindQueueFamilies() {
+    std::vector<vk::QueueFamilyProperties> queue_family_properties = physical_device_.getQueueFamilyProperties();
 
     auto graphics_queue_family_property = std::find_if(
       queue_family_properties.begin(),
@@ -219,26 +221,54 @@ private:
       }
     );
 
-    return static_cast<uint32_t>(std::distance(queue_family_properties.begin(), graphics_queue_family_property));
+    auto graphics_index = static_cast<uint32_t>(std::distance(queue_family_properties.begin(), graphics_queue_family_property));
+
+    auto present_index = physical_device_.getSurfaceSupportKHR(graphics_index, *surface_) ? graphics_index : static_cast<uint32_t>(queue_family_properties.size());
+
+    if (present_index == queue_family_properties.size()) {
+      for (size_t i = 0; i < queue_family_properties.size(); ++i) {
+        if ((queue_family_properties[i].queueFlags & vk::QueueFlagBits::eGraphics) &&
+            physical_device_.getSurfaceSupportKHR(static_cast<uint32_t>(i), *surface_))
+        {
+          graphics_index = static_cast<uint32_t>(i);
+          present_index = graphics_index;
+          break;
+        }
+      }
+    }
+
+    if (present_index == queue_family_properties.size()) {
+      for (size_t i = 0; i < queue_family_properties.size(); ++i) {
+        if (physical_device_.getSurfaceSupportKHR(static_cast<uint32_t>(i), *surface_)) {
+          graphics_index = static_cast<uint32_t>(i);
+          present_index = graphics_index;
+          break;
+        }
+      }
+    }
+
+    if (graphics_index == queue_family_properties.size() || present_index == queue_family_properties.size()) {
+      throw std::runtime_error("Could not find a queue for graphcis or present -> terminating");
+    }
+
+    return { graphics_index, present_index };
   }
 
   void CreateLogicalDevice() {
-    std::vector<vk::QueueFamilyProperties> queue_family_properties = physical_device_.getQueueFamilyProperties();
-    uint32_t graphics_index = FindQueueFamilies(physical_device_);
+    auto [graphics_index, present_index] = FindQueueFamilies();
+
+    vk::StructureChain<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan13Features, vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT> feature_chain = {
+      {},
+      { .dynamicRendering = true },
+      { .extendedDynamicState = true },
+    };
+
 
     float queue_priority = 0.5f;
     vk::DeviceQueueCreateInfo device_queue_create_info{
       .queueFamilyIndex = graphics_index,
       .queueCount = 1,
       .pQueuePriorities = &queue_priority,
-    };
-
-    vk::PhysicalDeviceFeatures device_features;
-
-    vk::StructureChain<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan13Features, vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT> feature_chain = {
-      {},
-      { .dynamicRendering = true },
-      { .extendedDynamicState = true },
     };
 
     vk::DeviceCreateInfo device_create_info{
@@ -251,6 +281,15 @@ private:
 
     device_ = vk::raii::Device(physical_device_, device_create_info);
     graphics_queue_ = vk::raii::Queue(device_, graphics_index, 0);
+    present_queue_ = vk::raii::Queue(device_, present_index, 0);
+  }
+
+  void CreateSurface() {
+    VkSurfaceKHR surface;
+    if (glfwCreateWindowSurface(*instance_, window_, nullptr, &surface) != 0) {
+      throw std::runtime_error("Failed to create window surface!");
+    }
+    surface_ = vk::raii::SurfaceKHR(instance_, surface);
   }
 
 private:
@@ -261,6 +300,8 @@ private:
   vk::raii::PhysicalDevice physical_device_ = nullptr;
   vk::raii::Device device_ = nullptr;
   vk::raii::Queue graphics_queue_ = nullptr;
+  vk::raii::SurfaceKHR surface_ = nullptr;
+  vk::raii::Queue present_queue_ = nullptr;
 
   std::vector<const char*> device_extensions_ = {
     vk::KHRSwapchainExtensionName,

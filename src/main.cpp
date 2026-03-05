@@ -72,6 +72,8 @@ private:
     CreateSwapChain();
     CreateImageViews();
     CreateGraphicsPipeline();
+    CreateCommandPool();
+    CreateCommandBuffer();
   }
 
   void MainLoop() {
@@ -304,6 +306,8 @@ private:
     device_ = vk::raii::Device(physical_device_, device_create_info);
     graphics_queue_ = vk::raii::Queue(device_, graphics_index, 0);
     present_queue_ = vk::raii::Queue(device_, present_index, 0);
+    graphics_index_ = graphics_index;
+    present_index_ = present_index;
   }
 
   void CreateSurface() {
@@ -522,6 +526,66 @@ private:
     return shader_module;
   }
 
+  void CreateCommandPool() {
+    vk::CommandPoolCreateInfo pool_info{
+      .flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+      .queueFamilyIndex = graphics_index_,
+    };
+
+    command_pool_ = vk::raii::CommandPool(device_, pool_info);
+  }
+
+  void CreateCommandBuffer() {
+    vk::CommandBufferAllocateInfo alloc_info{
+      .commandPool = command_pool_,
+      .level = vk::CommandBufferLevel::ePrimary,
+      .commandBufferCount = 1,
+    };
+
+    command_buffer_ = std::move(vk::raii::CommandBuffers(device_, alloc_info).front());
+  }
+
+  void RecordCommandBuffer(uint32_t image_index) {
+
+  }
+
+  void TransitionImageLayout(
+    uint32_t image_index,
+    vk::ImageLayout old_layout,
+    vk::ImageLayout new_layout,
+    vk::AccessFlags2 src_access_mask,
+    vk::AccessFlags2 dst_access_mask,
+    vk::PipelineStageFlags2 src_stage_mask,
+    vk::PipelineStageFlags2 dst_stage_mask
+  ) {
+    vk::ImageMemoryBarrier2 barrier{
+      .srcStageMask = src_stage_mask,
+      .srcAccessMask = src_access_mask,
+      .dstStageMask = dst_stage_mask,
+      .dstAccessMask = dst_access_mask,
+      .oldLayout = old_layout,
+      .newLayout = new_layout,
+      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .image = swap_chain_images_[image_index],
+      .subresourceRange = {
+        .aspectMask = vk::ImageAspectFlagBits::eColor,
+        .baseMipLevel = 0,
+        .levelCount = 1,
+        .baseArrayLayer = 0,
+        .layerCount = 1,
+      },
+    };
+
+    vk::DependencyInfo dependency_info{
+      .dependencyFlags = {},
+      .imageMemoryBarrierCount = 1,
+      .pImageMemoryBarriers = &barrier,
+    };
+
+    command_buffer_.pipelineBarrier2(dependency_info);
+  }
+
 private:
   GLFWwindow* window_;
   vk::raii::Context context_;
@@ -539,6 +603,11 @@ private:
   std::vector<vk::raii::ImageView> swap_chain_image_views_;
   vk::raii::PipelineLayout pipepline_layout_ = nullptr;
   vk::raii::Pipeline graphics_pipeline_ = nullptr;
+  vk::raii::CommandPool command_pool_ = nullptr;
+  vk::raii::CommandBuffer command_buffer_ = nullptr;
+
+  uint32_t graphics_index_;
+  uint32_t present_index_;
 
   std::vector<const char*> device_extensions_ = {
     vk::KHRSwapchainExtensionName,

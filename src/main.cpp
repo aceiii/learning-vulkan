@@ -1,4 +1,6 @@
+#include <cstdint>
 #include <algorithm>
+#include <limits>
 #include <print>
 #include <ranges>
 #include <tuple>
@@ -50,6 +52,7 @@ private:
     CreateSurface();
     PickPhysicalDevice();
     CreateLogicalDevice();
+    CreateSwapChain();
   }
 
   void MainLoop() {
@@ -292,6 +295,85 @@ private:
     surface_ = vk::raii::SurfaceKHR(instance_, surface);
   }
 
+  void CreateSwapChain() {
+    vk::SurfaceCapabilitiesKHR surface_capabilities = physical_device_.getSurfaceCapabilitiesKHR(surface_);
+    std::vector<vk::SurfaceFormatKHR> available_formats = physical_device_.getSurfaceFormatsKHR(surface_);
+    std::vector<vk::PresentModeKHR> available_present_modes = physical_device_.getSurfacePresentModesKHR(surface_);
+
+    auto swap_chain_surface_format = ChooseSwapSurfaceFormat(available_formats);
+    auto swap_chain_extent = ChooseSwapExtent(surface_capabilities);
+    auto min_image_count = std::max(3u, surface_capabilities.minImageCount);
+    min_image_count = (surface_capabilities.maxImageCount > 0 && min_image_count > surface_capabilities.maxImageCount)
+        ? surface_capabilities.maxImageCount : min_image_count;
+
+    vk::SwapchainCreateInfoKHR swap_chain_create_info{
+      .flags = vk::SwapchainCreateFlagBitsKHR(),
+      .surface = *surface_,
+      .minImageCount = min_image_count,
+      .imageFormat = swap_chain_surface_format.format,
+      .imageColorSpace = swap_chain_surface_format.colorSpace,
+      .imageExtent = swap_chain_extent,
+      .imageArrayLayers = 1,
+      .imageUsage = vk::ImageUsageFlagBits::eColorAttachment,
+      .imageSharingMode = vk::SharingMode::eExclusive,
+      .preTransform = surface_capabilities.currentTransform,
+      .compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque,
+      .presentMode = ChooseSwapPresentMode(available_present_modes),
+      .clipped = true,
+      .oldSwapchain = nullptr,
+    };
+
+    // auto [graphics_index, present_index] = FindQueueFamilies();
+    // uint32_t queue_family_indices[] = {graphics_index, present_index};
+    // if (graphics_index != present_index) {
+    //   swap_chain_create_info.imageSharingMode = vk::SharingMode::eConcurrent;
+    //   swap_chain_create_info.queueFamilyIndexCount = 2;
+    //   swap_chain_create_info.pQueueFamilyIndices = queue_family_indices;
+    // } else {
+    //   swap_chain_create_info.imageSharingMode = vk::SharingMode::eExclusive;
+    //   swap_chain_create_info.queueFamilyIndexCount = 0;
+    //   swap_chain_create_info.pQueueFamilyIndices = nullptr;
+    // }
+
+    swap_chain_ = vk::raii::SwapchainKHR(device_, swap_chain_create_info);
+    swap_chain_images_ = swap_chain_.getImages();
+    swap_chain_image_format_ = swap_chain_surface_format.format;
+    swap_chain_extend_ = swap_chain_extent;
+  }
+
+  vk::SurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& available_formats) {
+    for (const auto& available_format : available_formats) {
+      if (available_format.format == vk::Format::eB8G8R8Srgb && available_format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
+        return available_format;
+      }
+    }
+
+    return available_formats[0];
+  }
+
+  vk::PresentModeKHR ChooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& available_present_modes) {
+    for (const auto& available_present_mode : available_present_modes) {
+      if (available_present_mode == vk::PresentModeKHR::eMailbox) {
+        return available_present_mode;
+      }
+    }
+    return vk::PresentModeKHR::eFifo;
+  }
+
+  vk::Extent2D ChooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities) {
+    if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
+      return capabilities.currentExtent;
+    }
+
+    int width, height;
+    glfwGetFramebufferSize(window_, &width, &height);
+
+    return {
+      std::clamp<uint32_t>(width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
+      std::clamp<uint32_t>(height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height),
+    };
+  }
+
 private:
   GLFWwindow* window_;
   vk::raii::Context context_;
@@ -302,6 +384,10 @@ private:
   vk::raii::Queue graphics_queue_ = nullptr;
   vk::raii::SurfaceKHR surface_ = nullptr;
   vk::raii::Queue present_queue_ = nullptr;
+  vk::raii::SwapchainKHR swap_chain_ = nullptr;
+  std::vector<vk::Image> swap_chain_images_;
+  vk::Format swap_chain_image_format_;
+  vk::Extent2D swap_chain_extend_;
 
   std::vector<const char*> device_extensions_ = {
     vk::KHRSwapchainExtensionName,

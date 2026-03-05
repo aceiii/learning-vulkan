@@ -507,6 +507,8 @@ private:
       .layout = pipepline_layout_,
       .renderPass = nullptr,
     };
+
+    graphics_pipeline_ = vk::raii::Pipeline(device_, nullptr, pipeline_info);
   }
 
   [[nodiscard]] vk::raii::ShaderModule CreateShaderModule(const std::vector<char>& code) const {
@@ -536,6 +538,7 @@ private:
   std::vector<vk::Image> swap_chain_images_;
   std::vector<vk::raii::ImageView> swap_chain_image_views_;
   vk::raii::PipelineLayout pipepline_layout_ = nullptr;
+  vk::raii::Pipeline graphics_pipeline_ = nullptr;
 
   std::vector<const char*> device_extensions_ = {
     vk::KHRSwapchainExtensionName,

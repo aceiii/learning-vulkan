@@ -428,6 +428,16 @@ private:
       frag_shader_stage_info,
     };
 
+    std::vector dynamic_states = {
+      vk::DynamicState::eViewport,
+      vk::DynamicState::eScissor,
+    };
+
+    vk::PipelineDynamicStateCreateInfo dynamic_state{
+      .dynamicStateCount = static_cast<uint32_t>(dynamic_states.size()),
+      .pDynamicStates = dynamic_states.data(),
+    };
+
     vk::PipelineVertexInputStateCreateInfo vertex_input_info{};
 
     vk::PipelineInputAssemblyStateCreateInfo input_assembly{
@@ -477,6 +487,26 @@ private:
     };
 
     pipepline_layout_ = vk::raii::PipelineLayout(device_, pipeline_layout_info);
+
+    vk::PipelineRenderingCreateInfo pipeline_rendering_create_info{
+      .colorAttachmentCount = 1,
+      .pColorAttachmentFormats = &swap_chain_image_format_,
+    };
+
+    vk::GraphicsPipelineCreateInfo pipeline_info{
+      .pNext = &pipeline_rendering_create_info,
+      .stageCount = 2,
+      .pStages = shader_stages,
+      .pVertexInputState = &vertex_input_info,
+      .pInputAssemblyState = &input_assembly,
+      .pViewportState = &viewport_state,
+      .pRasterizationState = &rasterizer,
+      .pMultisampleState = &multisampling,
+      .pColorBlendState = &color_blending,
+      .pDynamicState = &dynamic_state,
+      .layout = pipepline_layout_,
+      .renderPass = nullptr,
+    };
   }
 
   [[nodiscard]] vk::raii::ShaderModule CreateShaderModule(const std::vector<char>& code) const {

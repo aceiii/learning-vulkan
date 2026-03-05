@@ -357,7 +357,7 @@ private:
     swap_chain_ = vk::raii::SwapchainKHR(device_, swap_chain_create_info);
     swap_chain_images_ = swap_chain_.getImages();
     swap_chain_image_format_ = swap_chain_surface_format.format;
-    swap_chain_extend_ = swap_chain_extent;
+    swap_chain_extent_ = swap_chain_extent;
   }
 
   vk::SurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& available_formats) {
@@ -427,6 +427,56 @@ private:
       vert_shader_stage_info,
       frag_shader_stage_info,
     };
+
+    vk::PipelineVertexInputStateCreateInfo vertex_input_info{};
+
+    vk::PipelineInputAssemblyStateCreateInfo input_assembly{
+      .topology = vk::PrimitiveTopology::eTriangleList,
+    };
+
+    vk::Viewport viewport{0.0f, 0.0f, static_cast<float>(swap_chain_extent_.width), static_cast<float>(swap_chain_extent_.height), 0.0f, 1.0f};
+
+    vk::Rect2D rect{vk::Offset2D{0, 0}, swap_chain_extent_ };
+
+    vk::PipelineViewportStateCreateInfo viewport_state{
+      .viewportCount = 1,
+      .scissorCount = 1,
+    };
+
+    vk::PipelineRasterizationStateCreateInfo rasterizer{
+      .depthClampEnable = vk::False,
+      .rasterizerDiscardEnable = vk::False,
+      .polygonMode = vk::PolygonMode::eFill,
+      .cullMode = vk::CullModeFlagBits::eBack,
+      .frontFace = vk::FrontFace::eClockwise,
+      .depthBiasClamp = vk::False,
+      .depthBiasSlopeFactor = 1.0f,
+      .lineWidth = 1.0f,
+    };
+
+    vk::PipelineMultisampleStateCreateInfo multisampling{
+      .rasterizationSamples = vk::SampleCountFlagBits::e1,
+      .sampleShadingEnable = vk::False,
+    };
+
+    vk::PipelineColorBlendAttachmentState color_blend_attachment{
+      .blendEnable = vk::False,
+      .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,
+    };
+
+    vk::PipelineColorBlendStateCreateInfo color_blending{
+      .logicOpEnable = vk::False,
+      .logicOp = vk::LogicOp::eCopy,
+      .attachmentCount = 1,
+      .pAttachments = &color_blend_attachment,
+    };
+
+    vk::PipelineLayoutCreateInfo pipeline_layout_info{
+      .setLayoutCount = 0,
+      .pushConstantRangeCount = 0,
+    };
+
+    pipepline_layout_ = vk::raii::PipelineLayout(device_, pipeline_layout_info);
   }
 
   [[nodiscard]] vk::raii::ShaderModule CreateShaderModule(const std::vector<char>& code) const {
@@ -452,9 +502,10 @@ private:
   vk::raii::Queue present_queue_ = nullptr;
   vk::raii::SwapchainKHR swap_chain_ = nullptr;
   vk::Format swap_chain_image_format_;
-  vk::Extent2D swap_chain_extend_;
+  vk::Extent2D swap_chain_extent_;
   std::vector<vk::Image> swap_chain_images_;
   std::vector<vk::raii::ImageView> swap_chain_image_views_;
+  vk::raii::PipelineLayout pipepline_layout_ = nullptr;
 
   std::vector<const char*> device_extensions_ = {
     vk::KHRSwapchainExtensionName,

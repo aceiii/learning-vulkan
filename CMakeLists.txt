@@ -5,8 +5,14 @@ project(learning-vulkan VERSION 0.0.1 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+include(cmake/slang.cmake)
+
 set(SOURCE_FILES
     src/main.cpp
+)
+
+set(SHADER_SLANG_SOURCES
+    shaders/shader.slang
 )
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES})
@@ -23,3 +29,9 @@ add_subdirectory(external/glm)
 add_subdirectory(external/Vulkan-Hpp)
 
 target_link_libraries(${PROJECT_NAME} PRIVATE Vulkan::Vulkan Vulkan::Hpp glfw glm::glm)
+
+
+message("SHADER_SLANG_SOURCES: " ${SHADER_SLANG_SOURCES})
+
+add_slang_shader_target(shaders SOURCES ${SHADER_SLANG_SOURCES} OUTPUT shaders/slang.spv)
+add_dependencies(${PROJECT_NAME} shaders)

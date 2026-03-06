@@ -25,6 +25,10 @@ namespace {
     "VK_LAYER_KHRONOS_validation"
   };
 
+  const std::vector<const char*> gDeviceExensions = {
+    vk::KHRSwapchainExtensionName,
+  };
+
 #if NDEBUG
   constexpr bool kEnableValidationLayers = false;
 #else
@@ -60,8 +64,16 @@ private:
     glfwInit();
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+    // glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
     window_ = glfwCreateWindow(kWindowWidth, kWindowHeight, kWindowTitle, nullptr, nullptr);
+
+    glfwSetWindowUserPointer(window_, this);
+    glfwSetFramebufferSizeCallback(window_, FramebufferResizeCallback);
+  }
+
+  static void FramebufferResizeCallback(GLFWwindow* window, int width, int height) {
+    auto app = reinterpret_cast<HelloTriangleApplication*>(glfwGetWindowUserPointer(window));
+    app->framebuffer_resized_ = true;
   }
 
   void InitVulkan() {
@@ -87,6 +99,7 @@ private:
   }
 
   void Cleanup() {
+    CleanupSwapChain();
     glfwDestroyWindow(window_);
     glfwTerminate();
   }
@@ -221,7 +234,7 @@ private:
 
       auto extensions = device.enumerateDeviceExtensionProperties();
       bool found = true;
-      for (const auto& extension : device_extensions_) {
+      for (const auto& extension : gDeviceExensions) {
         auto extension_iter = std::ranges::find_if(extensions, [extension](const auto& ext) {
           return strcmp(ext.extensionName, extension) == 0;
         });
@@ -303,8 +316,8 @@ private:
       .pNext = &feature_chain.get<vk::PhysicalDeviceFeatures2>(),
       .queueCreateInfoCount = 1,
       .pQueueCreateInfos = &device_queue_create_info,
-      .enabledExtensionCount = static_cast<uint32_t>(device_extensions_.size()),
-      .ppEnabledExtensionNames = device_extensions_.data(),
+      .enabledExtensionCount = static_cast<uint32_t>(gDeviceExensions.size()),
+      .ppEnabledExtensionNames = gDeviceExensions.data(),
     };
 
     device_ = vk::raii::Device(physical_device_, device_create_info);
@@ -656,9 +669,17 @@ private:
       throw std::runtime_error("Failed to wait for fence!");
     }
 
-    device_.resetFences(*in_flight_fences_[frame_index_]);
-
     auto [result, image_index] = swap_chain_.acquireNextImage(UINT64_MAX, *present_complete_semaphores_[frame_index_], nullptr);
+    if (result == vk::Result::eErrorOutOfDateKHR) {
+      RecreateSwapChain();
+      return;
+    }
+    if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
+      assert(result == vk::Result::eTimeout || result == vk::Result::eNotReady);
+      throw std::runtime_error("Failed to acquire swap chain image!");
+    }
+
+    device_.resetFences(*in_flight_fences_[frame_index_]);
 
     command_buffers_[frame_index_].reset();
     RecordCommandBuffer(image_index);
@@ -686,8 +707,26 @@ private:
     };
 
     result = present_queue_.presentKHR(present_info);
+    if (result == vk::Result::eSuboptimalKHR || result == vk::Result::eErrorOutOfDateKHR || framebuffer_resized_) {
+      framebuffer_resized_ = false;
+      RecreateSwapChain();
+    } else {
+      assert(result == vk::Result::eSuccess);
+    }
 
     frame_index_ = (frame_index_ + 1) % kMaxFramesInFlight;
+  }
+
+  void CleanupSwapChain() {
+    swap_chain_images_.clear();
+    swap_chain_ = nullptr;
+  }
+
+  void RecreateSwapChain() {
+    device_.waitIdle();
+    CleanupSwapChain();
+    CreateSwapChain();
+    CreateImageViews();
   }
 
 private:
@@ -718,9 +757,7 @@ private:
   uint32_t present_index_;
   uint32_t frame_index_ = 0;
 
-  std::vector<const char*> device_extensions_ = {
-    vk::KHRSwapchainExtensionName,
-  };
+  bool framebuffer_resized_ = false;
 };
 
 

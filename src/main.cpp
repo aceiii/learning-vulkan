@@ -723,6 +723,13 @@ private:
   }
 
   void RecreateSwapChain() {
+    int width = 0, height = 0;
+    glfwGetFramebufferSize(window_, &width, &height);
+    while (width == 0 || height == 0) {
+      glfwGetFramebufferSize(window_, &width, &height);
+      glfwWaitEvents();
+    }
+
     device_.waitIdle();
     CleanupSwapChain();
     CreateSwapChain();

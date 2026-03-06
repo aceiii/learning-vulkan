@@ -74,12 +74,15 @@ private:
     CreateGraphicsPipeline();
     CreateCommandPool();
     CreateCommandBuffer();
+    CreateSyncObjects();
   }
 
   void MainLoop() {
     while (!glfwWindowShouldClose(window_)) {
       glfwPollEvents();
+      DrawFrame();
     }
+    device_.waitIdle();
   }
 
   void Cleanup() {
@@ -631,6 +634,44 @@ private:
     command_buffer_.pipelineBarrier2(dependency_info);
   }
 
+  void CreateSyncObjects() {
+    present_complete_semaphore_ = vk::raii::Semaphore(device_, vk::SemaphoreCreateInfo{});
+    render_finished_semaphore_ = vk::raii::Semaphore(device_, vk::SemaphoreCreateInfo{});
+    draw_fence_ = vk::raii::Fence(device_, { .flags = vk::FenceCreateFlagBits::eSignaled });
+  }
+
+  void DrawFrame() {
+    auto fence_result = device_.waitForFences(*draw_fence_, vk::True, UINT64_MAX);
+    auto [result, image_index] = swap_chain_.acquireNextImage(UINT64_MAX, *present_complete_semaphore_, nullptr);
+
+    RecordCommandBuffer(image_index);
+
+    device_.resetFences(*draw_fence_);
+
+    vk::PipelineStageFlags wait_destination_stage_mask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
+    const vk::SubmitInfo submit_info{
+      .waitSemaphoreCount = 1,
+      .pWaitSemaphores = &*present_complete_semaphore_,
+      .pWaitDstStageMask = &wait_destination_stage_mask,
+      .commandBufferCount = 1,
+      .pCommandBuffers = &*command_buffer_,
+      .signalSemaphoreCount = 1,
+      .pSignalSemaphores = &*render_finished_semaphore_,
+    };
+
+    graphics_queue_.submit(submit_info, *draw_fence_);
+
+    const vk::PresentInfoKHR present_info{
+      .waitSemaphoreCount = 1,
+      .pWaitSemaphores = &*render_finished_semaphore_,
+      .swapchainCount = 1,
+      .pSwapchains = &*swap_chain_,
+      .pImageIndices = &image_index,
+    };
+
+    result = present_queue_.presentKHR(present_info);
+  }
+
 private:
   GLFWwindow* window_;
   vk::raii::Context context_;
@@ -650,6 +691,9 @@ private:
   vk::raii::Pipeline graphics_pipeline_ = nullptr;
   vk::raii::CommandPool command_pool_ = nullptr;
   vk::raii::CommandBuffer command_buffer_ = nullptr;
+  vk::raii::Semaphore present_complete_semaphore_ = nullptr;
+  vk::raii::Semaphore render_finished_semaphore_ = nullptr;
+  vk::raii::Fence draw_fence_ = nullptr;
 
   uint32_t graphics_index_;
   uint32_t present_index_;

@@ -734,31 +734,5 @@ auto main(int argc, char* argv[]) -> int {
     return 1;
   }
 
-  // std::println("Hello, Vulkan");
-
-  // if (!glfwInit()) {
-  //   std::println(stderr, "Failed to initialize GLFW");
-  //   return 1;
-  // }
-
-  // GLFWwindow* window = glfwCreateWindow(kWindowWidth, kWindowHeight, kWindowTitle, nullptr, nullptr);
-  // if (!window) {
-  //   std::println(stderr, "Failed to create window");
-  //   glfwTerminate();
-  //   return 1;
-  // }
-
-  // glfwMakeContextCurrent(window);
-
-  // while (!glfwWindowShouldClose(window)) {
-
-  //   glfwSwapBuffers(window);
-  //   glfwPollEvents();
-  // }
-
-  // glfwTerminate();
-
-  // std::println("Terminating...");
-
   return 0;
 }

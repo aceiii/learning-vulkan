@@ -15,6 +15,9 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#include <glm/glm.hpp>
+
+
 namespace {
   constexpr char const* kWindowTitle = "Learning Vulkan";
   constexpr int kWindowWidth = 800;
@@ -49,6 +52,31 @@ static std::vector<char> ReadFile(const std::string& filename) {
 
   return buffer;
 }
+
+
+struct Vertex {
+  glm::vec2 pos;
+  glm::vec3 color;
+
+  static vk::VertexInputBindingDescription GetBindingDescription() {
+    return { 0, sizeof(Vertex), vk::VertexInputRate::eVertex };
+  }
+
+  static std::array<vk::VertexInputAttributeDescription, 2> GetAttributeDescriptions() {
+    return {
+      vk::VertexInputAttributeDescription(0, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, pos)),
+      vk::VertexInputAttributeDescription(1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, color)),
+    };
+  }
+};
+
+namespace {
+  const std::vector<Vertex> vertices = {
+    {{0.0f, -0.5f}, {1.0f, 1.0f, 1.0f}},
+    {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+  };
+};
 
 class HelloTriangleApplication {
 public:
@@ -86,6 +114,7 @@ private:
     CreateImageViews();
     CreateGraphicsPipeline();
     CreateCommandPool();
+    CreateVertexBuffer();
     CreateCommandBuffers();
     CreateSyncObjects();
   }
@@ -459,7 +488,14 @@ private:
       .pDynamicStates = dynamic_states.data(),
     };
 
-    vk::PipelineVertexInputStateCreateInfo vertex_input_info{};
+    auto binding_description = Vertex::GetBindingDescription();
+    auto attribute_descriptions = Vertex::GetAttributeDescriptions();
+    vk::PipelineVertexInputStateCreateInfo vertex_input_info{
+      .vertexBindingDescriptionCount = 1,
+      .pVertexBindingDescriptions = &binding_description,
+      .vertexAttributeDescriptionCount = static_cast<uint32_t>(attribute_descriptions.size()),
+      .pVertexAttributeDescriptions = attribute_descriptions.data(),
+    };
 
     vk::PipelineInputAssemblyStateCreateInfo input_assembly{
       .topology = vk::PrimitiveTopology::eTriangleList,
@@ -594,7 +630,8 @@ private:
     };
 
     command_buffer.beginRendering(rendering_info);
-    command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphics_pipeline_);
+    command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *graphics_pipeline_);
+    command_buffer.bindVertexBuffers(0, *vertex_buffer_, {0});
     command_buffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swap_chain_extent_.width), static_cast<float>(swap_chain_extent_.height), 0.0f, 1.0f));
     command_buffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swap_chain_extent_));
     command_buffer.draw(3, 1, 0, 0);
@@ -736,6 +773,39 @@ private:
     CreateImageViews();
   }
 
+  void CreateVertexBuffer() {
+    vk::BufferCreateInfo buffer_info{
+      .size = sizeof(vertices[0]) * vertices.size(),
+      .usage = vk::BufferUsageFlagBits::eVertexBuffer,
+      .sharingMode = vk::SharingMode::eExclusive,
+    };
+    vertex_buffer_ = vk::raii::Buffer(device_, buffer_info);
+
+    vk::MemoryRequirements mem_requirements = vertex_buffer_.getMemoryRequirements();
+
+    vk::MemoryAllocateInfo memory_allocate_info{
+      .allocationSize = mem_requirements.size,
+      .memoryTypeIndex = findMemoryType(mem_requirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent),
+    };
+
+    vertex_buffer_memory_ = vk::raii::DeviceMemory(device_, memory_allocate_info);
+    vertex_buffer_.bindMemory(*vertex_buffer_memory_, 0);
+
+    void* data = vertex_buffer_memory_.mapMemory(0, buffer_info.size);
+    memcpy(data, vertices.data(), buffer_info.size);
+    vertex_buffer_memory_.unmapMemory();
+  }
+
+  uint32_t findMemoryType(uint32_t type_filter, vk::MemoryPropertyFlags properties) {
+    vk::PhysicalDeviceMemoryProperties mem_properties = physical_device_.getMemoryProperties();
+    for (uint32_t i = 0; i < mem_properties.memoryTypeCount; i++) {
+      if (type_filter & (1  << i)) {
+        return 1;
+      }
+    }
+    throw std::runtime_error("Failed to find a suitable memory type");
+  }
+
 private:
   GLFWwindow* window_;
   vk::raii::Context context_;
@@ -754,6 +824,8 @@ private:
   vk::raii::PipelineLayout pipepline_layout_ = nullptr;
   vk::raii::Pipeline graphics_pipeline_ = nullptr;
   vk::raii::CommandPool command_pool_ = nullptr;
+  vk::raii::Buffer vertex_buffer_ = nullptr;
+  vk::raii::DeviceMemory vertex_buffer_memory_ = nullptr;
 
   std::vector<vk::raii::CommandBuffer> command_buffers_;
   std::vector<vk::raii::Semaphore> present_complete_semaphores_;

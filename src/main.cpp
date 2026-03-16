@@ -774,25 +774,11 @@ private:
   }
 
   void CreateVertexBuffer() {
-    vk::BufferCreateInfo buffer_info{
-      .size = sizeof(vertices[0]) * vertices.size(),
-      .usage = vk::BufferUsageFlagBits::eVertexBuffer,
-      .sharingMode = vk::SharingMode::eExclusive,
-    };
-    vertex_buffer_ = vk::raii::Buffer(device_, buffer_info);
+    vk::DeviceSize buffer_size = sizeof(vertices[0]) * vertices.size();
+    CreateBuffer(buffer_size, vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, vertex_buffer_, vertex_buffer_memory_);
 
-    vk::MemoryRequirements mem_requirements = vertex_buffer_.getMemoryRequirements();
-
-    vk::MemoryAllocateInfo memory_allocate_info{
-      .allocationSize = mem_requirements.size,
-      .memoryTypeIndex = findMemoryType(mem_requirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent),
-    };
-
-    vertex_buffer_memory_ = vk::raii::DeviceMemory(device_, memory_allocate_info);
-    vertex_buffer_.bindMemory(*vertex_buffer_memory_, 0);
-
-    void* data = vertex_buffer_memory_.mapMemory(0, buffer_info.size);
-    memcpy(data, vertices.data(), buffer_info.size);
+    void* data = vertex_buffer_memory_.mapMemory(0, buffer_size);
+    memcpy(data, vertices.data(), buffer_size);
     vertex_buffer_memory_.unmapMemory();
   }
 
@@ -804,6 +790,25 @@ private:
       }
     }
     throw std::runtime_error("Failed to find a suitable memory type");
+  }
+
+  void CreateBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::raii::Buffer& buffer, vk::raii::DeviceMemory& buffer_memory) {
+    vk::BufferCreateInfo buffer_info{
+      .size = size,
+      .usage = usage,
+      .sharingMode = vk::SharingMode::eExclusive,
+    };
+
+    buffer = vk::raii::Buffer(device_, buffer_info);
+
+    vk::MemoryRequirements mem_requirements = buffer.getMemoryRequirements();
+    vk::MemoryAllocateInfo alloc_info{
+      .allocationSize = mem_requirements.size,
+      .memoryTypeIndex = findMemoryType(mem_requirements.memoryTypeBits, properties),
+    };
+
+    buffer_memory = vk::raii::DeviceMemory(device_, alloc_info);
+    buffer.bindMemory(*buffer_memory, 0);
   }
 
 private:

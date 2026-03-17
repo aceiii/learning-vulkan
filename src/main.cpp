@@ -72,9 +72,14 @@ struct Vertex {
 
 namespace {
   const std::vector<Vertex> vertices = {
-    {{0.0f, -0.5f}, {1.0f, 1.0f, 1.0f}},
-    {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}},
+  };
+
+  const std::vector<uint16_t> indices = {
+    0, 1, 2, 2, 3, 0,
   };
 };
 
@@ -115,6 +120,7 @@ private:
     CreateGraphicsPipeline();
     CreateCommandPool();
     CreateVertexBuffer();
+    CreateIndexBuffer();
     CreateCommandBuffers();
     CreateSyncObjects();
   }
@@ -632,9 +638,10 @@ private:
     command_buffer.beginRendering(rendering_info);
     command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *graphics_pipeline_);
     command_buffer.bindVertexBuffers(0, *vertex_buffer_, {0});
+    command_buffer.bindIndexBuffer(*index_buffer_, 0, vk::IndexType::eUint16);
     command_buffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swap_chain_extent_.width), static_cast<float>(swap_chain_extent_.height), 0.0f, 1.0f));
     command_buffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swap_chain_extent_));
-    command_buffer.draw(3, 1, 0, 0);
+    command_buffer.drawIndexed(indices.size(), 1, 0, 0, 0);
     command_buffer.endRendering();
 
     TransitionImageLayout(
@@ -813,6 +820,22 @@ private:
     CopyBuffer(staging_buffer, vertex_buffer_, staging_info.size);
   }
 
+  void CreateIndexBuffer() {
+    vk::DeviceSize buffer_size = sizeof(indices[0]) * indices.size();
+
+    vk::raii::Buffer staging_buffer({});
+    vk::raii::DeviceMemory staging_buffer_memory({});
+    CreateBuffer(buffer_size, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, staging_buffer, staging_buffer_memory);
+
+    void* data = staging_buffer_memory.mapMemory(0, buffer_size);
+    memcpy(data, indices.data(), buffer_size);
+    staging_buffer_memory.unmapMemory();
+
+    CreateBuffer(buffer_size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal, index_buffer_, index_buffer_memory_);
+
+    CopyBuffer(staging_buffer, index_buffer_, buffer_size);
+  }
+
   uint32_t FindMemoryType(uint32_t type_filter, vk::MemoryPropertyFlags properties) {
     vk::PhysicalDeviceMemoryProperties mem_properties = physical_device_.getMemoryProperties();
     for (uint32_t i = 0; i < mem_properties.memoryTypeCount; i++) {
@@ -878,6 +901,8 @@ private:
   vk::raii::CommandPool command_pool_ = nullptr;
   vk::raii::Buffer vertex_buffer_ = nullptr;
   vk::raii::DeviceMemory vertex_buffer_memory_ = nullptr;
+  vk::raii::Buffer index_buffer_ = nullptr;
+  vk::raii::DeviceMemory index_buffer_memory_ = nullptr;
 
   std::vector<vk::raii::CommandBuffer> command_buffers_;
   std::vector<vk::raii::Semaphore> present_complete_semaphores_;

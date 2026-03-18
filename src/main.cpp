@@ -1,3 +1,4 @@
+#include <chrono>
 #include <cstdint>
 #include <algorithm>
 #include <fstream>
@@ -16,7 +17,30 @@
 #include <GLFW/glfw3.h>
 
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
+
+struct Vertex {
+  glm::vec2 pos;
+  glm::vec3 color;
+
+  static vk::VertexInputBindingDescription GetBindingDescription() {
+    return { 0, sizeof(Vertex), vk::VertexInputRate::eVertex };
+  }
+
+  static std::array<vk::VertexInputAttributeDescription, 2> GetAttributeDescriptions() {
+    return {
+      vk::VertexInputAttributeDescription(0, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, pos)),
+      vk::VertexInputAttributeDescription(1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, color)),
+    };
+  }
+};
+
+struct UniformBufferObject {
+  glm::mat4 model;
+  glm::mat4 view;
+  glm::mat4 proj;
+};
 
 namespace {
   constexpr char const* kWindowTitle = "Learning Vulkan";
@@ -30,6 +54,17 @@ namespace {
 
   const std::vector<const char*> gDeviceExensions = {
     vk::KHRSwapchainExtensionName,
+  };
+
+  const std::vector<Vertex> vertices = {
+    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}},
+  };
+
+  const std::vector<uint16_t> indices = {
+    0, 1, 2, 2, 3, 0,
   };
 
 #if NDEBUG
@@ -52,36 +87,6 @@ static std::vector<char> ReadFile(const std::string& filename) {
 
   return buffer;
 }
-
-
-struct Vertex {
-  glm::vec2 pos;
-  glm::vec3 color;
-
-  static vk::VertexInputBindingDescription GetBindingDescription() {
-    return { 0, sizeof(Vertex), vk::VertexInputRate::eVertex };
-  }
-
-  static std::array<vk::VertexInputAttributeDescription, 2> GetAttributeDescriptions() {
-    return {
-      vk::VertexInputAttributeDescription(0, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, pos)),
-      vk::VertexInputAttributeDescription(1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, color)),
-    };
-  }
-};
-
-namespace {
-  const std::vector<Vertex> vertices = {
-    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}},
-  };
-
-  const std::vector<uint16_t> indices = {
-    0, 1, 2, 2, 3, 0,
-  };
-};
 
 class HelloTriangleApplication {
 public:
@@ -117,10 +122,12 @@ private:
     CreateLogicalDevice();
     CreateSwapChain();
     CreateImageViews();
+    CreateDescriptorSetLayout();
     CreateGraphicsPipeline();
     CreateCommandPool();
     CreateVertexBuffer();
     CreateIndexBuffer();
+    CreateUniformBuffers();
     CreateCommandBuffers();
     CreateSyncObjects();
   }
@@ -728,6 +735,8 @@ private:
     command_buffers_[frame_index_].reset();
     RecordCommandBuffer(image_index);
 
+    UpdateUniformBuffers(frame_index_);
+
     vk::PipelineStageFlags wait_destination_stage_mask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
 
     const vk::SubmitInfo submit_info{
@@ -881,6 +890,55 @@ private:
     graphics_queue_.waitIdle();
   }
 
+  void CreateDescriptorSetLayout() {
+    vk::DescriptorSetLayoutBinding ubo_layout_binding(0, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eVertex, nullptr);
+    vk::DescriptorSetLayoutCreateInfo layout_info{
+      .bindingCount = 1,
+      .pBindings = &ubo_layout_binding,
+    };
+    descriptor_set_layout_ = vk::raii::DescriptorSetLayout(device_, layout_info);
+
+    vk::PipelineLayoutCreateInfo pipeline_layout_info{
+      .setLayoutCount = 1,
+      .pSetLayouts = &*descriptor_set_layout_,
+      .pushConstantRangeCount = 0,
+    };
+
+  }
+
+  void CreateUniformBuffers() {
+    uniform_buffers_.clear();
+    uniform_buffers_memory_.clear();
+    uniform_buffers_mapped_.clear();
+
+    for (size_t i = 0; i < kMaxFramesInFlight; i++) {
+      vk::DeviceSize buffer_size = sizeof(UniformBufferObject);
+      vk::raii::Buffer buffer({});
+      vk::raii::DeviceMemory buffer_mem({});
+
+      CreateBuffer(buffer_size, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, buffer, buffer_mem);
+
+      uniform_buffers_.emplace_back(std::move(buffer));
+      uniform_buffers_memory_.emplace_back(std::move(buffer_mem));
+      uniform_buffers_mapped_.emplace_back(uniform_buffers_memory_[i].mapMemory(0, buffer_size));
+    }
+  }
+
+  void UpdateUniformBuffers(uint32_t current_image) {
+    static auto start_time = std::chrono::high_resolution_clock::now();
+
+    auto current_time = std::chrono::high_resolution_clock::now();
+    float time = std::chrono::duration<float, std::chrono::seconds::period>(current_time - start_time).count();
+
+    UniformBufferObject ubo{};
+    ubo.model = rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.view = lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.proj = glm::perspective(glm::radians(45.0f), static_cast<float>(swap_chain_extent_.width) / static_cast<float>(swap_chain_extent_.height), 0.1f, 10.0f);
+    ubo.proj[1][1] *= -1;
+
+    memcpy(uniform_buffers_mapped_[current_image], &ubo, sizeof(ubo));
+  }
+
 private:
   GLFWwindow* window_;
   vk::raii::Context context_;
@@ -903,11 +961,16 @@ private:
   vk::raii::DeviceMemory vertex_buffer_memory_ = nullptr;
   vk::raii::Buffer index_buffer_ = nullptr;
   vk::raii::DeviceMemory index_buffer_memory_ = nullptr;
+  vk::raii::DescriptorSetLayout descriptor_set_layout_ = nullptr;
+  vk::raii::PipelineLayout pipeline_layout = nullptr;
 
   std::vector<vk::raii::CommandBuffer> command_buffers_;
   std::vector<vk::raii::Semaphore> present_complete_semaphores_;
   std::vector<vk::raii::Semaphore> render_finished_semaphores_;
   std::vector<vk::raii::Fence> in_flight_fences_;
+  std::vector<vk::raii::Buffer> uniform_buffers_;
+  std::vector<vk::raii::DeviceMemory> uniform_buffers_memory_;
+  std::vector<void*> uniform_buffers_mapped_;
 
   uint32_t graphics_index_;
   uint32_t present_index_;

@@ -128,6 +128,8 @@ private:
     CreateVertexBuffer();
     CreateIndexBuffer();
     CreateUniformBuffers();
+    CreateDescriptorPool();
+    CreateDescriptorSets();
     CreateCommandBuffers();
     CreateSyncObjects();
   }
@@ -528,7 +530,7 @@ private:
       .rasterizerDiscardEnable = vk::False,
       .polygonMode = vk::PolygonMode::eFill,
       .cullMode = vk::CullModeFlagBits::eBack,
-      .frontFace = vk::FrontFace::eClockwise,
+      .frontFace = vk::FrontFace::eCounterClockwise,
       .depthBiasClamp = vk::False,
       .depthBiasSlopeFactor = 1.0f,
       .lineWidth = 1.0f,
@@ -648,6 +650,7 @@ private:
     command_buffer.bindIndexBuffer(*index_buffer_, 0, vk::IndexType::eUint16);
     command_buffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swap_chain_extent_.width), static_cast<float>(swap_chain_extent_.height), 0.0f, 1.0f));
     command_buffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swap_chain_extent_));
+    command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline_layout_, 0, *descriptor_sets_[frame_index_], nullptr);
     command_buffer.drawIndexed(indices.size(), 1, 0, 0, 0);
     command_buffer.endRendering();
 
@@ -939,6 +942,46 @@ private:
     memcpy(uniform_buffers_mapped_[current_image], &ubo, sizeof(ubo));
   }
 
+  void CreateDescriptorPool() {
+    vk::DescriptorPoolSize pool_size(vk::DescriptorType::eUniformBuffer, kMaxFramesInFlight);
+    vk::DescriptorPoolCreateInfo pool_info{
+      .flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
+      .maxSets = kMaxFramesInFlight,
+      .poolSizeCount = 1,
+      .pPoolSizes = &pool_size,
+    };
+    descriptor_pool_ = vk::raii::DescriptorPool(device_, pool_info);
+  }
+
+  void CreateDescriptorSets() {
+    std::vector<vk::DescriptorSetLayout> layouts(kMaxFramesInFlight, *descriptor_set_layout_);
+    vk::DescriptorSetAllocateInfo alloc_info{
+      .descriptorPool = descriptor_pool_,
+      .descriptorSetCount = static_cast<uint32_t>(layouts.size()),
+      .pSetLayouts = layouts.data(),
+    };
+
+    descriptor_sets_.clear();
+    descriptor_sets_ = device_.allocateDescriptorSets(alloc_info);
+
+    for (size_t i = 0; i < kMaxFramesInFlight; i++) {
+      vk::DescriptorBufferInfo buffer_info{
+        .buffer = uniform_buffers_[i],
+        .offset = 0,
+        .range = sizeof(UniformBufferObject),
+      };
+      vk::WriteDescriptorSet descriptor_write{
+        .dstSet = descriptor_sets_[i],
+        .dstBinding = 0,
+        .dstArrayElement = 0,
+        .descriptorCount = 1,
+        .descriptorType = vk::DescriptorType::eUniformBuffer,
+        .pBufferInfo = &buffer_info,
+      };
+      device_.updateDescriptorSets(descriptor_write, {});
+    }
+  }
+
 private:
   GLFWwindow* window_;
   vk::raii::Context context_;
@@ -962,7 +1005,8 @@ private:
   vk::raii::Buffer index_buffer_ = nullptr;
   vk::raii::DeviceMemory index_buffer_memory_ = nullptr;
   vk::raii::DescriptorSetLayout descriptor_set_layout_ = nullptr;
-  vk::raii::PipelineLayout pipeline_layout = nullptr;
+  vk::raii::PipelineLayout pipeline_layout_ = nullptr;
+  vk::raii::DescriptorPool descriptor_pool_ = nullptr;
 
   std::vector<vk::raii::CommandBuffer> command_buffers_;
   std::vector<vk::raii::Semaphore> present_complete_semaphores_;
@@ -971,6 +1015,7 @@ private:
   std::vector<vk::raii::Buffer> uniform_buffers_;
   std::vector<vk::raii::DeviceMemory> uniform_buffers_memory_;
   std::vector<void*> uniform_buffers_mapped_;
+  std::vector<vk::raii::DescriptorSet> descriptor_sets_;
 
   uint32_t graphics_index_;
   uint32_t present_index_;

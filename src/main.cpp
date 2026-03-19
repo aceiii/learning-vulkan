@@ -344,7 +344,7 @@ private:
 
     vk::StructureChain<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan13Features, vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT> feature_chain = {
       {},
-      { .dynamicRendering = true },
+      { .synchronization2 = true, .dynamicRendering = true },
       { .extendedDynamicState = true },
     };
 
@@ -554,11 +554,12 @@ private:
     };
 
     vk::PipelineLayoutCreateInfo pipeline_layout_info{
-      .setLayoutCount = 0,
+      .setLayoutCount = 1,
+      .pSetLayouts = &*descriptor_set_layout_,
       .pushConstantRangeCount = 0,
     };
 
-    pipepline_layout_ = vk::raii::PipelineLayout(device_, pipeline_layout_info);
+    pipeline_layout_ = vk::raii::PipelineLayout(device_, pipeline_layout_info);
 
     vk::PipelineRenderingCreateInfo pipeline_rendering_create_info{
       .colorAttachmentCount = 1,
@@ -576,7 +577,7 @@ private:
       .pMultisampleState = &multisampling,
       .pColorBlendState = &color_blending,
       .pDynamicState = &dynamic_state,
-      .layout = pipepline_layout_,
+      .layout = pipeline_layout_,
       .renderPass = nullptr,
     };
 
@@ -900,13 +901,6 @@ private:
       .pBindings = &ubo_layout_binding,
     };
     descriptor_set_layout_ = vk::raii::DescriptorSetLayout(device_, layout_info);
-
-    vk::PipelineLayoutCreateInfo pipeline_layout_info{
-      .setLayoutCount = 1,
-      .pSetLayouts = &*descriptor_set_layout_,
-      .pushConstantRangeCount = 0,
-    };
-
   }
 
   void CreateUniformBuffers() {
@@ -997,7 +991,7 @@ private:
   vk::Extent2D swap_chain_extent_;
   std::vector<vk::Image> swap_chain_images_;
   std::vector<vk::raii::ImageView> swap_chain_image_views_;
-  vk::raii::PipelineLayout pipepline_layout_ = nullptr;
+  vk::raii::PipelineLayout pipeline_layout_ = nullptr;
   vk::raii::Pipeline graphics_pipeline_ = nullptr;
   vk::raii::CommandPool command_pool_ = nullptr;
   vk::raii::Buffer vertex_buffer_ = nullptr;
@@ -1005,7 +999,6 @@ private:
   vk::raii::Buffer index_buffer_ = nullptr;
   vk::raii::DeviceMemory index_buffer_memory_ = nullptr;
   vk::raii::DescriptorSetLayout descriptor_set_layout_ = nullptr;
-  vk::raii::PipelineLayout pipeline_layout_ = nullptr;
   vk::raii::DescriptorPool descriptor_pool_ = nullptr;
 
   std::vector<vk::raii::CommandBuffer> command_buffers_;
